@@ -1,0 +1,83 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video to Subtitle Converter</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        #progress-bar { width: 100%; background-color: #f0f0f0; }
+        #progress { height: 30px; background-color: #4CAF50; width: 0%; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Video to Subtitle Converter</h1>
+    
+    {% if not model_exists %}
+    <div class="error">
+        <p><strong>Warning:</strong> Vosk model not found!</p>
+        <p>Please follow these steps to set up the Vosk model:</p>
+        <ol>
+            <li>Download the Arabic Vosk model from <a href="https://alphacephei.com/vosk/models" target="_blank">https://alphacephei.com/vosk/models</a></li>
+            <li>Extract the downloaded model</li>
+            <li>Rename the extracted folder to "vosk-model-arabic"</li>
+            <li>Place the "vosk-model-arabic" folder in the same directory as this application ({{ model_path }})</li>
+            <li>Restart the application</li>
+        </ol>
+    </div>
+    {% else %}
+    <p>Vosk model is properly set up.</p>
+    {% endif %}
+
+    <form id="upload-form" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".mp4,.avi,.mov,.mkv">
+        <button type="submit" {% if not model_exists %}disabled{% endif %}>Upload and Process</button>
+    </form>
+    <div id="status"></div>
+    <div id="progress-bar"><div id="progress"></div></div>
+    <div id="download-link"></div>
+
+    <script>
+        $(document).ready(function() {
+            $('#upload-form').on('submit', function(e) {
+                e.preventDefault();
+                var formData = new FormData(this);
+                $.ajax({
+                    url: '/upload',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(data) {
+                        $('#status').text('Processing started...');
+                        checkStatus(data.task_id);
+                    },
+                    error: function(jqXHR) {
+                        $('#status').text('Upload failed: ' + jqXHR.responseJSON.error);
+                    }
+                });
+            });
+
+            function checkStatus(taskId) {
+                $.get('/status/' + taskId, function(data) {
+                    $('#status').text(data.status);
+                    if (data.status.startsWith('Transcribing')) {
+                        var percent = parseFloat(data.status.split(':')[1]) * 100;
+                        $('#progress').css('width', percent + '%');
+                    }
+                    if (data.status !== 'Completed' && !data.status.startsWith('Error')) {
+                        setTimeout(function() {
+                            checkStatus(taskId);
+                        }, 1000);
+                    } else if (data.status === 'Completed') {
+                        $('#download-link').html('<a href="/download/' + taskId + '">Download Subtitle</a>');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
